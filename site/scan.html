@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>反転対応スキャナ</title><link rel="stylesheet" href="style.css"></head>
+<body><main>
+<p><a href="./">← 戻る</a></p>
+<h1>反転対応スキャナ</h1>
+<div class="stage"><video id="v" playsinline muted></video></div>
+<canvas id="c" hidden></canvas>
+<p id="status" class="mute">カメラを起動しています…</p>
+<div class="card" id="res" hidden>
+  <div class="ok">読み取り成功</div>
+  <p class="result" id="url"></p>
+  <p id="note" class="warn"></p>
+  <div class="row"><a id="open" class="btn" target="_blank" rel="noopener">開く</a><button id="again" class="sub">続けて読み取る</button></div>
+</div>
+<label class="mute"><input type="checkbox" id="auto"> 読み取り後に自動で開く</label>
+<script src="jsQR.js"></script>
+<script>
+const v=document.getElementById('v'),c=document.getElementById('c'),ctx=c.getContext('2d',{willReadFrequently:true});
+const st=document.getElementById('status'),res=document.getElementById('res');
+let running=false,last='';
+async function start(){
+  try{
+    const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});
+    v.srcObject=s;await v.play();running=true;st.textContent='QRをカメラに映してください（白黒どちらでも可）';requestAnimationFrame(tick);
+  }catch(e){st.textContent='カメラを起動できません: '+e.message+'（HTTPSでアクセスし、カメラを許可してください）';}
+}
+function tick(){
+  if(!running){return}
+  if(v.readyState>=2&&v.videoWidth){
+    const k=Math.min(1,1000/v.videoWidth);c.width=Math.round(v.videoWidth*k);c.height=Math.round(v.videoHeight*k);
+    ctx.drawImage(v,0,0,c.width,c.height);
+    const d=ctx.getImageData(0,0,c.width,c.height);
+    let r=null;try{r=jsQR(d.data,d.width,d.height,{inversionAttempts:'attemptBoth'})}catch(e){}
+    if(r&&r.data){found(r.data);return}
+  }
+  setTimeout(()=>requestAnimationFrame(tick),60);
+}
+function found(t){
+  running=false;last=t;navigator.vibrate&&navigator.vibrate(80);
+  document.getElementById('url').textContent=t;
+  let ok=false;try{const u=new URL(t);ok=u.protocol==='https:'&&/(^|\.)(luma\.com|lu\.ma)$/.test(u.hostname)}catch{}
+  document.getElementById('note').textContent=ok?'':'⚠ Lumaのドメインではありません。内容を確認してから開いてください。';
+  const a=document.getElementById('open');a.href=ok||/^https?:/.test(t)?t:'#';
+  res.hidden=false;st.textContent='';
+  if(ok&&document.getElementById('auto').checked)window.open(t,'_blank','noopener');
+}
+document.getElementById('again').onclick=()=>{res.hidden=true;running=true;st.textContent='QRをカメラに映してください';requestAnimationFrame(tick)};
+start();
+</script>
+</main></body></html>
